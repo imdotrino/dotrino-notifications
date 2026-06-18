@@ -1,0 +1,38 @@
+{
+  "name": "@dotrino/notifications",
+  "version": "0.3.0",
+  "description": "Notificaciones compartidas del ecosistema Dotrino: controlador data-agnostic (permiso del navegador + preferencias por categoría con scope por app + disparo), el Web Component <dotrino-notifications> (panel de ajustes), helper de Web Push ligado al vault + proxy y acuses de apertura de contenido compartido (createShareReceipts). Autohosteado, Shadow DOM, sin JS de terceros ni cookies.",
+  "type": "module",
+  "main": "src/index.js",
+  "module": "src/index.js",
+  "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node test/smoke.mjs"
+  },
+  "keywords": [
+    "dotrino",
+    "web-component",
+    "custom-element",
+    "notifications",
+    "web-push",
+    "pwa",
+    "cross-app"
+  ],
+  "author": "seyacat",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/imdotrino/dotrino-notifications.git"
+  }
+}
