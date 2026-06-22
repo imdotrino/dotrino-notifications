@@ -1,5 +1,7 @@
 # @dotrino/notifications
 
+> **Parte del ecosistema [Dotrino](https://dotrino.com).** Misión: aplicaciones que resuelven problemas comunes, respetando tu privacidad — sin anuncios, sin cookies, sin rastreo de datos, sin vender tu identidad a nadie.
+
 Notificaciones compartidas del ecosistema **Dotrino**. Unifica lo que cada
 app reimplementaba por separado (messenger, eco, chess, pronóstico, gymbro):
 
