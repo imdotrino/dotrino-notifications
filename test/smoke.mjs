@@ -4,9 +4,15 @@ import assert from 'node:assert'
 import { createNotifications, createVaultPushProvider, createShareReceipts, packPubkey, unpackPubkey, DotrinoNotifications } from '../src/index.js'
 
 let failed = 0
-const ok = (name, fn) => { try { fn(); console.log('  ✓', name) } catch (e) { failed++; console.error('  ✗', name, '\n   ', e.message) } }
+// SE ESPERA A LO ASÍNCRONO. Antes no: `fn()` se llamaba y se seguía, así que una prueba
+// async que fallaba acababa en un rechazo no atendido y salía con un ✓ al lado. Una suite
+// que no puede fallar es peor que no tenerla.
+const ok = async (name, fn) => {
+  try { await fn(); console.log('  ✓', name) }
+  catch (e) { failed++; console.error('  ✗', name, '\n   ', e.message) }
+}
 
-ok('exports presentes', () => {
+await ok('exports presentes', () => {
   assert.equal(typeof createNotifications, 'function')
   assert.equal(typeof createVaultPushProvider, 'function')
   assert.equal(typeof createShareReceipts, 'function')
@@ -21,13 +27,13 @@ const ctrl = createNotifications({
   ],
 })
 
-ok('defaults por categoría', () => {
+await ok('defaults por categoría', () => {
   assert.equal(ctrl.get('a'), true)
   assert.equal(ctrl.get('b'), false)
   assert.equal(ctrl.soundEnabled, true)
 })
 
-ok('set / shouldNotify', () => {
+await ok('set / shouldNotify', () => {
   ctrl.set('a', false)
   assert.equal(ctrl.get('a'), false)
   assert.equal(ctrl.shouldNotify('a'), false)
@@ -36,19 +42,19 @@ ok('set / shouldNotify', () => {
   assert.equal(ctrl.shouldNotify('b'), true)
 })
 
-ok('set ignora claves desconocidas', () => {
+await ok('set ignora claves desconocidas', () => {
   ctrl.set('zzz', true)
   assert.equal(ctrl.get('zzz'), undefined)
 })
 
-ok('sin navegador: unsupported / notify null', async () => {
+await ok('sin navegador: unsupported / notify null', async () => {
   assert.equal(ctrl.permission(), 'unsupported')
   assert.equal(ctrl.supported, false)
   const r = await ctrl.notify('b', { title: 'hi' })
   assert.equal(r, null)
 })
 
-ok('subscribe se dispara en set', () => {
+await ok('subscribe se dispara en set', () => {
   let n = 0
   const off = ctrl.subscribe(() => { n++ })
   ctrl.set('a', true)
@@ -58,7 +64,7 @@ ok('subscribe se dispara en set', () => {
   assert.equal(n, 1)
 })
 
-ok('createVaultPushProvider expone la API', () => {
+await ok('createVaultPushProvider expone la API', () => {
   const p = createVaultPushProvider({ proxyClient: {}, identity: {}, storageKey: 'smoke' })
   for (const m of ['supported', 'isEnabled', 'busy', 'error', 'enable', 'disable', 'ensureSubscribed']) {
     assert.equal(typeof p[m], 'function', 'falta ' + m)
@@ -66,7 +72,7 @@ ok('createVaultPushProvider expone la API', () => {
   assert.equal(p.supported(), false) // sin navegador
 })
 
-ok('push integrado en el controlador', () => {
+await ok('push integrado en el controlador', () => {
   const pushed = createNotifications({
     storageKey: 'smoke2',
     categories: [{ key: 'x', label: 'X' }],
@@ -78,10 +84,14 @@ ok('push integrado en el controlador', () => {
 })
 
 // ---- acuses de apertura (createShareReceipts) ----
+//
+// El transporte de mentira expone `sendSealed`, no `sendByPubkey`: desde 0.4.0 el acuse
+// va sellado y el camino en claro ya no existe (CONVENCIONES §4.1). El sellado de verdad,
+// contra el cliente real y mirando el cable, está en `sellado.test.mjs`.
 const sent = []
 const fakeProxy = {
   on () { return () => {} },
-  sendByPubkey (pk, payload) { sent.push({ pk, payload }) },
+  async sendSealed (pk, payload) { sent.push({ pk, payload }) },
 }
 const fakeId = { me: { publickey: 'PK_ME', nickname: 'yo' } }
 const receipts = createShareReceipts({
@@ -90,11 +100,11 @@ const receipts = createShareReceipts({
   notifications: ctrl,
 })
 
-ok('createShareReceipts expone la API', () => {
+await ok('createShareReceipts expone la API', () => {
   for (const m of ['report', 'start', 'stop']) assert.equal(typeof receipts[m], 'function', 'falta ' + m)
 })
 
-ok('report encola un sobre __ccn con from identificado', async () => {
+await ok('report encola un sobre __ccn con from identificado', async () => {
   sent.length = 0
   const okRep = await receipts.report({ toPubkey: 'PK_OTRO', url: 'https://x/#abc', name: 'Mi pronóstico' })
   assert.equal(okRep, true)
@@ -109,16 +119,16 @@ ok('report encola un sobre __ccn con from identificado', async () => {
   assert.equal(env.from.nick, 'yo')
 })
 
-ok('report no avisa a uno mismo', async () => {
+await ok('report no avisa a uno mismo', async () => {
   sent.length = 0
   const okRep = await receipts.report({ toPubkey: 'PK_ME', url: 'https://x/#self' })
   assert.equal(okRep, false)
   assert.equal(sent.length, 0)
 })
 
-ok('start() + acuse entrante dispara onReceipt (referidos)', async () => {
+await ok('start() + acuse entrante dispara onReceipt (referidos)', async () => {
   let onMessage = null
-  const recvProxy = { on (ev, fn) { if (ev === 'message') onMessage = fn; return () => {} }, sendByPubkey () {} }
+  const recvProxy = { on (ev, fn) { if (ev === 'message') onMessage = fn; return () => {} }, async sendSealed () {} }
   const got = []
   const r2 = createShareReceipts({
     proxyClient: recvProxy,
@@ -130,15 +140,20 @@ ok('start() + acuse entrante dispara onReceipt (referidos)', async () => {
   r2.start()
   assert.equal(typeof onMessage, 'function', 'start() enganchó el handler de message')
   const env = { __ccn: 1, kind: 'referral', url: 'https://x/', name: null, from: { pubkey: 'PK_B', nick: 'b' }, ts: 123 }
-  onMessage('tok', env)
+  // Sin la marca del pilar no entra: sellar solo de salida no serviría de nada.
+  onMessage('tok', env, { sealed: false })
+  assert.equal(got.length, 0)
+  assert.equal(r2.unsealedDropped, 1)
+
+  onMessage('tok', env, { sealed: true })
   assert.equal(got.length, 1)
   assert.equal(got[0].from.pubkey, 'PK_B')
   // dedup en sesión: el mismo sobre no vuelve a disparar
-  onMessage('tok', env)
+  onMessage('tok', env, { sealed: true })
   assert.equal(got.length, 1)
 })
 
-ok('packPubkey / unpackPubkey round-trip exacto', () => {
+await ok('packPubkey / unpackPubkey round-trip exacto', () => {
   const pk = '{"kty":"EC","crv":"P-256","x":"abc-_DEF","y":"012_xyz","ext":true}'
   const token = packPubkey(pk)
   assert.equal(typeof token, 'string')

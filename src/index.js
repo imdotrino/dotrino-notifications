@@ -252,18 +252,28 @@ export function createVaultPushProvider ({ proxyClient, identity, storageKey = '
  * ecosistema.
  *
  *   - Lado del que ABRE:   report({ toPubkey, url, kind, name })  → manda un
- *       sobre firmable por la cola offline del proxy (sendByPubkey, 24h). No
+ *       sobre SELLADO por la cola offline del proxy (sendSealed, 24h). No
  *       avisa si el contenido es propio (toPubkey === mi pubkey) y aplica
  *       throttle por (toPubkey|url) para no spamear al reabrir.
- *   - Lado AUTOR:          start()  → escucha mensajes del proxy, filtra los
- *       sobres de acuse (__ccn) y dispara una notificación local con el enlace
- *       (data.url). El CONTENIDO por defecto es el mismo en toda app; la app
- *       puede inyectar render(env) para personalizarlo.
+ *   - Lado AUTOR:          start()  → escucha mensajes del proxy, DESCARTA lo que
+ *       no venga sellado, filtra los sobres de acuse (__ccn) y dispara una
+ *       notificación local con el enlace (data.url). El CONTENIDO por defecto es
+ *       el mismo en toda app; la app puede inyectar render(env) para
+ *       personalizarlo.
  *
  * El transporte y la identidad NO se reimplementan: se inyectan los mismos
  * `proxyClient` (dotrino-proxy-client) e `identity` (vault) que usa el
- * resto del ecosistema. El contenido viaja por la cola CIFRADA del proxy, no
- * por el push (el push solo "timbra" sin contenido — política del ecosistema).
+ * resto del ecosistema. El contenido viaja por la cola del proxy, no por el push
+ * (el push solo "timbra" sin contenido — política del ecosistema).
+ *
+ * EL ACUSE VA SELLADO, Y ESTO ES UNA CORRECCIÓN (CONVENCIONES §4.1). Aquí estuvo
+ * escrito durante meses que la cola del proxio era «cifrada». No lo es: el
+ * transporte enruta por pubkey y manda el payload TAL CUAL, así que el acuse
+ * —que lleva la URL del contenido, su nombre y el apodo de quien lo abrió— lo
+ * podía leer quien opera el proxio, que corre en un VPS alquilado. Desde 0.4.0
+ * se manda con `sendSealed` (`@dotrino/proxy-client` ≥ 0.20.0, que además
+ * AVERIGUA la llave del otro lado: hace falta, porque un acuse se le escribe
+ * justo a quien está apagado) y se descarta lo que llegue sin sellar.
  * ==========================================================================*/
 
 const RECEIPT_TAG = '__ccn'        // marca del sobre (envelope) de acuse
@@ -295,7 +305,8 @@ function _receiptLang (lang) {
  *
  * @param {object} cfg
  * @param {object|function} cfg.proxyClient  cliente proxy del ecosistema (o getter).
- *        Debe exponer `on('message', (from, payload) => …)` y `sendByPubkey(pk, payload)`.
+ *        Debe exponer `on('message', (from, payload, meta) => …)` y
+ *        `sendSealed(pk, payload)` — o sea `@dotrino/proxy-client` >= 0.20.0.
  * @param {object|function} cfg.identity     instancia Identity del vault (o getter async).
  * @param {object} cfg.notifications         controlador de createNotifications(...) (para notify/prefs).
  * @param {string} [cfg.category='shareOpened']  categoría de prefs a respetar/disparar.
@@ -330,16 +341,23 @@ export function createShareReceipts (cfg = {}) {
   }
 
   // ---- anti-spam: 1 acuse por (toPubkey|url) por ventana (localStorage) ----
+  //
+  // CONSULTAR y MARCAR son dos cosas distintas, y antes eran una sola: se marcaba al
+  // preguntar, así que un acuse que NO llegó a salir dejaba el sitio quemado 24 h. Ahora
+  // solo se marca lo que se mandó de verdad.
+  function _throttleKey (toPubkey, url) { return LS_THROTTLE + _hash(toPubkey + '|' + url) }
   function _throttled (toPubkey, url) {
-    if (!isBrowser || throttleMs <= 0) return false
+    // Por el ALMACÉN, no por `window`: así la ventana también se respeta fuera del
+    // navegador (un runner de pruebas, un bot), donde antes se ignoraba en silencio.
+    if (throttleMs <= 0 || typeof localStorage === 'undefined') return false
     try {
-      const k = LS_THROTTLE + _hash(toPubkey + '|' + url)
-      const last = Number(localStorage.getItem(k) || 0)
-      const now = Date.now()
-      if (now - last < throttleMs) return true
-      localStorage.setItem(k, String(now))
-      return false
+      const last = Number(localStorage.getItem(_throttleKey(toPubkey, url)) || 0)
+      return Date.now() - last < throttleMs
     } catch (_) { return false }
+  }
+  function _markSent (toPubkey, url) {
+    if (throttleMs <= 0 || typeof localStorage === 'undefined') return
+    try { localStorage.setItem(_throttleKey(toPubkey, url), String(Date.now())) } catch (_) {}
   }
 
   // Hash corto y estable (djb2) para no guardar la URL completa en la clave.
@@ -351,9 +369,21 @@ export function createShareReceipts (cfg = {}) {
 
   /**
    * Lado del que ABRE: avisa al autor (toPubkey) que abriste su contenido.
-   * No-op si es contenido propio o si el throttle lo bloquea. Devuelve true si
-   * se encoló el acuse.
+   *
+   * EL ACUSE VA SELLADO, SIEMPRE. Lleva la URL del contenido, su nombre y el apodo de
+   * quien lo abrió: es del usuario, y el transporte no cifra (CONVENCIONES §4.1). Si no
+   * se puede sellar, NO se manda en claro — se lanza, con el `code` del pilar intacto,
+   * para que la app pueda decir qué pasó en vez de quedarse callada.
+   *
+   * Devuelve `true` si el acuse salió, y `false` solo cuando se decidió no mandarlo:
+   * contenido propio, throttle, o faltan los datos. Lo demás lanza.
+   *
    * @returns {Promise<boolean>}
+   * @throws {Error & {code?:string}} `no-encpub` (el autor nunca anunció su llave de
+   *   cifrado: no hay a quién sellarle, y esperar no lo arregla — lo arregla que él
+   *   actualice), `encpub-unverified` (llegó una llave que esa identidad no firmó),
+   *   `no-encpub-support` (el proxio es viejo), `no-sealed-transport` (la app cableó un
+   *   cliente sin `sendSealed`).
    */
   async function report ({ toPubkey, url, kind = 'opened', name } = {}) {
     if (!toPubkey || !url) return false
@@ -367,15 +397,28 @@ export function createShareReceipts (cfg = {}) {
       from = { pubkey: (id && id.me && id.me.publickey) || mine || null, nick: (id && id.me && id.me.nickname) || null }
     } catch (_) {}
     const env = { [RECEIPT_TAG]: RECEIPT_VERSION, kind, url, name: name || null, from, ts: Date.now() }
-    try {
-      const proxy = getProxy()
-      if (typeof proxy.ensureConnected === 'function') { try { await proxy.ensureConnected() } catch (_) {} }
-      proxy.sendByPubkey(toPubkey, env)
-      return true
-    } catch (e) {
-      console.warn('[cc-notif] report (acuse) falló:', (e && e.message) || e)
-      return false
+    const proxy = getProxy()
+    // Sin `sendSealed` no hay camino: el `sendByPubkey` de al lado mandaría esto en claro
+    // por un VPS alquilado. Se para aquí y se dice cuál es el arreglo.
+    if (!proxy || typeof proxy.sendSealed !== 'function') {
+      throw Object.assign(
+        new Error('[cc-notif] el cliente de transporte no sabe sellar: hace falta ' +
+          '@dotrino/proxy-client >= 0.20.0 (el acuse NO se manda en claro)'),
+        { code: 'no-sealed-transport' })
     }
+    if (typeof proxy.ensureConnected === 'function') { try { await proxy.ensureConnected() } catch (_) {} }
+    try {
+      await proxy.sendSealed(toPubkey, env)
+    } catch (e) {
+      // Por `code`, nunca por la frase: «el otro no ha anunciado llave» se arregla
+      // actualizando el otro lado, y «se cayó la red» esperando. Verlos iguales manda a
+      // quien depura al camino equivocado (CONVENCIONES §8.1).
+      console.warn('[cc-notif] el acuse no se pudo sellar (' + ((e && e.code) || 'sin code') +
+        '): no se manda en claro —', (e && e.message) || e)
+      throw e
+    }
+    _markSent(toPubkey, url)
+    return true
   }
 
   // Construye {title, body, ...} por defecto a partir del sobre (mismo contenido
@@ -410,15 +453,37 @@ export function createShareReceipts (cfg = {}) {
     })
   }
 
-  /** Lado AUTOR: empieza a escuchar acuses entrantes (idempotente). */
+  /**
+   * Lado AUTOR: empieza a escuchar acuses entrantes (idempotente).
+   *
+   * SOLO SE ACEPTA LO SELLADO. Sellar únicamente de salida no sirve de nada: si esta
+   * punta sigue admitiendo texto plano, mandarlo así se salta el sellado entero, y
+   * alguien que nunca haya leído nada puede colar un acuse falso con el enlace que
+   * quiera (el usuario lo pulsa desde la notificación). Quien ABRE el sobre es el pilar
+   * —una sola capa, o el primero que llega sin la llave lo descarta y el otro nunca ve
+   * nada—; aquí solo se comprueba la marca que el pilar deja en `meta.sealed`.
+   */
   function start () {
     if (_off) return
     const proxy = getProxy()
     if (!proxy || typeof proxy.on !== 'function') return
-    _off = proxy.on('message', (_from, payload) => {
+    _off = proxy.on('message', (_from, payload, meta) => {
+      if (!meta || meta.sealed !== true) { _dropUnsealed(); return }
       const env = (typeof payload === 'object' && payload) ? payload : _tryParse(payload)
       _handle(env)
     })
+  }
+
+  // Se dice UNA vez y con cuenta: un mensaje en claro por segundo llenando la consola
+  // esconde justo lo que hay que ver, y no decirlo nada lo convierte en el fallo mudo.
+  let _enClaro = 0
+  function _dropUnsealed () {
+    _enClaro++
+    if (_enClaro === 1) {
+      console.warn('[cc-notif] llegó un mensaje SIN SELLAR y se descarta: el acuse va ' +
+        'sellado desde 0.4.0 (CONVENCIONES §4.1). Si es de una versión vieja de la app, ' +
+        'el otro lado tiene que actualizar.')
+    }
   }
 
   function _tryParse (s) {
@@ -428,7 +493,11 @@ export function createShareReceipts (cfg = {}) {
 
   function stop () { if (_off) { try { _off() } catch (_) {} _off = null } }
 
-  return { report, start, stop, category, RECEIPT_TAG, RECEIPT_VERSION }
+  return {
+    report, start, stop, category, RECEIPT_TAG, RECEIPT_VERSION,
+    /** Cuántos mensajes en claro se han descartado (diagnóstico; no es una preferencia). */
+    get unsealedDropped () { return _enClaro },
+  }
 }
 
 /* ----------------------------------------------------------------------------

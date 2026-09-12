@@ -107,7 +107,8 @@ export interface ShareReceiptEnvelope {
 }
 
 export interface ShareReceiptsConfig {
-  /** Cliente proxy del ecosistema (o getter): on('message',…) + sendByPubkey. */
+  /** Cliente proxy del ecosistema (o getter): on('message',…) + sendSealed
+   *  (`@dotrino/proxy-client` >= 0.20.0). El acuse NUNCA sale en claro. */
   proxyClient: any | (() => any)
   /** Instancia Identity del vault (o getter, puede ser async). */
   identity: any | (() => any | Promise<any>)
@@ -128,15 +129,23 @@ export interface ShareReceiptsConfig {
 }
 
 export interface ShareReceipts {
-  /** Lado del que ABRE: avisa al autor que abriste su contenido. */
+  /**
+   * Lado del que ABRE: avisa al autor que abriste su contenido, SELLADO.
+   *
+   * `true` = salió. `false` = se decidió no mandarlo (contenido propio, throttle, faltan
+   * datos). Si no se puede sellar LANZA con `code` (`no-encpub`, `encpub-unverified`,
+   * `no-encpub-support`, `no-sealed-transport`): no se manda en claro.
+   */
   report(opts: { toPubkey: string; url: string; kind?: string; name?: string }): Promise<boolean>
-  /** Lado AUTOR: empieza a escuchar acuses entrantes (idempotente). */
+  /** Lado AUTOR: empieza a escuchar acuses entrantes (idempotente). Descarta lo no sellado. */
   start(): void
   /** Deja de escuchar. */
   stop(): void
   readonly category: string
   readonly RECEIPT_TAG: string
   readonly RECEIPT_VERSION: number
+  /** Cuántos mensajes en claro se descartaron (diagnóstico). */
+  readonly unsealedDropped: number
 }
 
 /** Motor común de acuses de apertura de contenido compartido. */
