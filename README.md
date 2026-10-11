@@ -219,6 +219,22 @@ await receipts.report({ toPubkey: parsed.publickey, url: sharedUrl, name: parsed
 > del autor) no usan este acuse: el anfitrión ya ve el "join" por el canal. Pueden
 > enrutar ese evento por el mismo `createNotifications` para una UX uniforme.
 
+## El trino (`@dotrino/notifications/ring`)
+
+El sonido de **todos** los avisos de Dotrino, uno solo para el ecosistema. Es el mismo que
+`DotrinoRing` toca en iOS y Android (`dotrino-native`); aquí va para la web.
+
+```js
+import { playRing } from '@dotrino/notifications/ring'
+
+playRing().catch((e) => console.warn('ring: could not play', e.name))
+```
+
+- El subpath no importa nada más: quien solo quiere el sonido no se trae el panel.
+- El archivo viaja como asset (`RING_URL`), no embebido en el JS.
+- `playRing()` **rechaza** si el navegador no deja sonar a la página (nadie la ha tocado
+  todavía): quien llama decide qué hacer con eso.
+
 ## Tema (CSS custom properties)
 
 ```css
