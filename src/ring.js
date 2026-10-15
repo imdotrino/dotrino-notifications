@@ -12,6 +12,15 @@
 // solo quiere el trino no se trae el panel de notificaciones: `@dotrino/notifications/ring`.
 export const RING_URL = new URL('./ring.mp3', import.meta.url).href
 
+// EL TRINO DE TERMINADO: OTRO trino, para «lo que pediste ya acabó» (una consola de Dotrino Terminal
+// que terminó), distinto del de aviso para que se distingan de oído (dueño, 2026-10-14). Es
+// `sound/trinos/trino-02b.wav` de la raíz del ecosistema, convertido igual que el de aviso:
+//
+//     ffmpeg -i trino-02b.wav -c:a libmp3lame -q:a 4 src/done.mp3
+//
+// El mismo en iOS y Android (`DotrinoRing.playDone`) y en la app de escritorio del terminal.
+export const DONE_URL = new URL('./done.mp3', import.meta.url).href
+
 /** How loud the trino plays by default, over the volume the person set (0…1). */
 export const RING_VOLUME = 0.6
 
@@ -22,7 +31,20 @@ export const RING_VOLUME = 0.6
  * @returns {Promise<void>}
  */
 export function playRing ({ volume = RING_VOLUME } = {}) {
-  const a = new Audio(RING_URL)
+  return play(RING_URL, volume)
+}
+
+/**
+ * Plays the "done" trino now: what you asked for has finished. Rejects like `playRing`.
+ * @param {{ volume?: number }} [opts]
+ * @returns {Promise<void>}
+ */
+export function playDone ({ volume = RING_VOLUME } = {}) {
+  return play(DONE_URL, volume)
+}
+
+function play (url, volume) {
+  const a = new Audio(url)
   a.volume = Math.min(1, Math.max(0, volume))
   return a.play()
 }
