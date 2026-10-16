@@ -41,7 +41,7 @@
     "url": "git+https://github.com/imdotrino/dotrino-notifications.git"
   },
   "devDependencies": {
-    "@dotrino/proxy-client": "0.22.0",
+    "@dotrino/proxy-client": "0.36.1",
     "@types/node": "^22.0.0",
     "typescript": "5.9.3"
   },
