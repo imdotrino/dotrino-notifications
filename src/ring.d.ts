@@ -6,5 +6,7 @@ export const RING_VOLUME: number
 export function playRing(opts?: { volume?: number }): Promise<void>
 /** URL del trino de TERMINADO: otro trino, para «lo que pediste ya acabó» (el mismo que `DotrinoRing.playDone`). */
 export const DONE_URL: string
-/** Toca el trino de terminado ahora. Rechaza igual que `playRing`. */
-export function playDone(opts?: { volume?: number }): Promise<void>
+/** Las tres versiones del trino de terminado: `high` es el original (= `DONE_URL`). */
+export const DONE_URLS: Readonly<{ low: string, standard: string, high: string }>
+/** Toca el trino de terminado ahora (por defecto la versión `high`). Rechaza igual que `playRing`. */
+export function playDone(opts?: { volume?: number, level?: 'low' | 'standard' | 'high' }): Promise<void>

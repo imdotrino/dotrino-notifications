@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const made = []
 globalThis.Audio = class { constructor (src) { this.src = src; this.volume = 1; made.push(this) } play () { return this.fail ? Promise.reject(this.fail) : Promise.resolve() } }
-const { RING_URL, RING_VOLUME, playRing } = await import('../src/ring.js')
+const { RING_URL, RING_VOLUME, playRing, DONE_URL, DONE_URLS, playDone } = await import('../src/ring.js')
 
 test('the sound ships with the package', () => {
   const file = fileURLToPath(RING_URL)
@@ -32,4 +32,16 @@ test('a browser that does not let it sound is not hidden', async () => {
   globalThis.Audio = class extends Was { fail = blocked }
   await assert.rejects(playRing(), { name: 'NotAllowedError' })
   globalThis.Audio = Was
+})
+
+test('the done trino has three levels, high is the original', async () => {
+  assert.equal(DONE_URL, DONE_URLS.high)
+  for (const level of ['low', 'standard', 'high']) {
+    assert.ok(statSync(fileURLToPath(DONE_URLS[level])).size > 1000, level)
+    await playDone({ level })
+    assert.equal(made.at(-1).src, DONE_URLS[level])
+  }
+  await playDone()
+  assert.equal(made.at(-1).src, DONE_URLS.high)
+  await assert.rejects(playDone({ level: 'loud' }), { code: 'unknown-level' })
 })

@@ -16,10 +16,19 @@ export const RING_URL = new URL('./ring.mp3', import.meta.url).href
 // que terminó), distinto del de aviso para que se distingan de oído (dueño, 2026-10-14). Es
 // `sound/trinos/trino-02b.wav` de la raíz del ecosistema, convertido igual que el de aviso:
 //
-//     ffmpeg -i trino-02b.wav -c:a libmp3lame -q:a 4 src/done.mp3
+//     ffmpeg -i trino-02b-<nivel>.wav -c:a libmp3lame -q:a 4 src/done-<nivel>.mp3
 //
+// Tres versiones (dueño, 2026-10-17), las mismas de la app de escritorio del terminal: `high` es el
+// original, y `standard` y `low` van 4,5 y 12,5 dB por debajo (`sound/trinos/trino-02b-<nivel>.wav`).
+// Dotrino Terminal toca la `low`: junto a una terminal el original sonaba muy fuerte. Cada URL va
+// escrita entera para que Vite vea los tres archivos.
 // El mismo en iOS y Android (`DotrinoRing.playDone`) y en la app de escritorio del terminal.
-export const DONE_URL = new URL('./done.mp3', import.meta.url).href
+export const DONE_URLS = Object.freeze({
+  low: new URL('./done-low.mp3', import.meta.url).href,
+  standard: new URL('./done-standard.mp3', import.meta.url).href,
+  high: new URL('./done-high.mp3', import.meta.url).href,
+})
+export const DONE_URL = DONE_URLS.high
 
 /** How loud the trino plays by default, over the volume the person set (0…1). */
 export const RING_VOLUME = 0.6
@@ -35,12 +44,15 @@ export function playRing ({ volume = RING_VOLUME } = {}) {
 }
 
 /**
- * Plays the "done" trino now: what you asked for has finished. Rejects like `playRing`.
- * @param {{ volume?: number }} [opts]
+ * Plays the "done" trino now: what you asked for has finished. Rejects like `playRing`, and throws
+ * on a level that does not exist.
+ * @param {{ volume?: number, level?: 'low' | 'standard' | 'high' }} [opts]
  * @returns {Promise<void>}
  */
-export function playDone ({ volume = RING_VOLUME } = {}) {
-  return play(DONE_URL, volume)
+export function playDone ({ volume = RING_VOLUME, level = 'high' } = {}) {
+  const url = DONE_URLS[level]
+  if (!url) return Promise.reject(Object.assign(new Error(`ring: unknown level ${level}`), { code: 'unknown-level' }))
+  return play(url, volume)
 }
 
 function play (url, volume) {

@@ -234,6 +234,9 @@ playRing().catch((e) => console.warn('ring: could not play', e.name))
 - El archivo viaja como asset (`RING_URL`), no embebido en el JS.
 - `playRing()` **rechaza** si el navegador no deja sonar a la página (nadie la ha tocado
   todavía): quien llama decide qué hacer con eso.
+- `playDone({ level })` toca el trino de **terminado**, otro sonido. Tiene tres versiones:
+  `high` (el original, por defecto), `standard` y `low` (4,5 y 12,5 dB por debajo; `DONE_URLS`).
+  Dotrino Terminal usa `low`.
 
 ## Tema (CSS custom properties)
 
