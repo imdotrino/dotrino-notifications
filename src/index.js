@@ -188,7 +188,7 @@ export function createVaultPushProvider ({ proxyClient, identity, storageKey = '
   async function _vault () {
     const id = await getId()
     const publicKey = id && id.me && id.me.publickey
-    if (!id || !publicKey) throw new Error('Vault de identidad no disponible')
+    if (!id || !publicKey) throw new Error('identity vault not available')
     return { publicKey, sign: (d) => id.signData(d) }
   }
 
@@ -229,7 +229,7 @@ export function createVaultPushProvider ({ proxyClient, identity, storageKey = '
     try {
       const { publicKey, sign } = await _vault()
       await getProxy().enablePush({ publicKey, sign })
-    } catch (e) { console.warn('[cc-notif] ensureSubscribed falló:', (e && e.message) || e) }
+    } catch (e) { console.warn('[cc-notif] ensureSubscribed failed:', (e && e.message) || e) }
   }
 
   return {
@@ -402,8 +402,8 @@ export function createShareReceipts (cfg = {}) {
     // por un VPS alquilado. Se para aquí y se dice cuál es el arreglo.
     if (!proxy || typeof proxy.sendSealed !== 'function') {
       throw Object.assign(
-        new Error('[cc-notif] el cliente de transporte no sabe sellar: hace falta ' +
-          '@dotrino/proxy-client >= 0.20.0 (el acuse NO se manda en claro)'),
+        new Error('[cc-notif] the transport client cannot seal: ' +
+          '@dotrino/proxy-client >= 0.20.0 required (the receipt is NOT sent in clear)'),
         { code: 'no-sealed-transport' })
     }
     if (typeof proxy.ensureConnected === 'function') { try { await proxy.ensureConnected() } catch (_) {} }
@@ -413,8 +413,8 @@ export function createShareReceipts (cfg = {}) {
       // Por `code`, nunca por la frase: «el otro no ha anunciado llave» se arregla
       // actualizando el otro lado, y «se cayó la red» esperando. Verlos iguales manda a
       // quien depura al camino equivocado (CONVENCIONES §8.1).
-      console.warn('[cc-notif] el acuse no se pudo sellar (' + ((e && e.code) || 'sin code') +
-        '): no se manda en claro —', (e && e.message) || e)
+      console.warn('[cc-notif] could not seal the receipt (' + ((e && e.code) || 'no code') +
+        '): it is not sent in clear —', (e && e.message) || e)
       throw e
     }
     _markSent(toPubkey, url)
@@ -476,13 +476,13 @@ export function createShareReceipts (cfg = {}) {
 
   // Se dice UNA vez y con cuenta: un mensaje en claro por segundo llenando la consola
   // esconde justo lo que hay que ver, y no decirlo nada lo convierte en el fallo mudo.
-  let _enClaro = 0
+  let _unsealedCount = 0
   function _dropUnsealed () {
-    _enClaro++
-    if (_enClaro === 1) {
-      console.warn('[cc-notif] llegó un mensaje SIN SELLAR y se descarta: el acuse va ' +
-        'sellado desde 0.4.0 (CONVENCIONES §4.1). Si es de una versión vieja de la app, ' +
-        'el otro lado tiene que actualizar.')
+    _unsealedCount++
+    if (_unsealedCount === 1) {
+      console.warn('[cc-notif] dropped an UNSEALED message: receipts are ' +
+        'sealed since 0.4.0 (CONVENCIONES §4.1). If it comes from an old app version, ' +
+        'the other side must update.')
     }
   }
 
@@ -496,7 +496,7 @@ export function createShareReceipts (cfg = {}) {
   return {
     report, start, stop, category, RECEIPT_TAG, RECEIPT_VERSION,
     /** Cuántos mensajes en claro se han descartado (diagnóstico; no es una preferencia). */
-    get unsealedDropped () { return _enClaro },
+    get unsealedDropped () { return _unsealedCount },
   }
 }
 

@@ -87,7 +87,7 @@ await ok('push integrado en el controlador', () => {
 //
 // El transporte de mentira expone `sendSealed`, no `sendByPubkey`: desde 0.4.0 el acuse
 // va sellado y el camino en claro ya no existe (CONVENCIONES §4.1). El sellado de verdad,
-// contra el cliente real y mirando el cable, está en `sellado.test.mjs`.
+// contra el cliente real y mirando el cable, está en `sealed.test.mjs`.
 const sent = []
 const fakeProxy = {
   on () { return () => {} },

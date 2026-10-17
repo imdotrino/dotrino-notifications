@@ -18,7 +18,7 @@ const canon = (v) => (v === null || typeof v !== 'object')
     ? '[' + v.map(canon).join(',') + ']'
     : '{' + Object.keys(v).sort().map((k) => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}'
 
-export async function boveda (nickname) {
+export async function fakeVault (nickname) {
   const firma = await subtle.generateKey(ECDSA, true, ['sign', 'verify'])
   const cifrado = await subtle.generateKey(ECDH, true, ['deriveBits'])
   const jf = await subtle.exportKey('jwk', firma.publicKey)

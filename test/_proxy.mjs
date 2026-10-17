@@ -28,7 +28,7 @@ Object.defineProperty(globalThis, 'localStorage', {
   }
 })
 
-export function crearProxio () {
+export function createProxy () {
   const conexiones = new Map()          // token -> socket
   const porPubkey = new Map()           // publickey -> Set<token>
   const cola = new Map()                // publickey -> [mensajes]
@@ -126,7 +126,7 @@ export function crearProxio () {
 }
 
 /** El `WebSocket` que el cliente de verdad usará, enchufado al proxio de arriba. */
-export function instalarWebSocket (proxio) {
+export function installWebSocket (proxio) {
   class SocketDePrueba {
     static OPEN = 1
     static CLOSED = 3

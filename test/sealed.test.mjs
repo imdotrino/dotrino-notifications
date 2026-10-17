@@ -18,8 +18,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { crearProxio, instalarWebSocket } from './_proxio.mjs'
-import { boveda } from './_boveda.mjs'
+import { createProxy, installWebSocket } from './_proxy.mjs'
+import { fakeVault } from './_vault.mjs'
 import { createShareReceipts } from '../src/index.js'
 
 const { WebSocketProxyClient, identitySealing } = await import('@dotrino/proxy-client')
@@ -29,7 +29,7 @@ const NOMBRE = 'Mi pronostico del mundial'
 
 /** Una persona: su bóveda + su cliente del transporte, ya sellando. */
 async function persona (proxio, nick) {
-  const id = await boveda(nick)
+  const id = await fakeVault(nick)
   const client = new WebSocketProxyClient({
     url: 'ws://proxio-de-prueba',
     enableWebRTC: false,
@@ -72,8 +72,8 @@ function motor (p, { onReceipt } = {}) {
 // ---------------------------------------------------------------------------
 
 test('el autor APAGADO: el acuse se sella, espera en la cola y se abre al encenderse', async () => {
-  const proxio = crearProxio()
-  instalarWebSocket(proxio)
+  const proxio = createProxy()
+  installWebSocket(proxio)
 
   // El autor se conecta UNA vez —lo justo para anunciar su llave— y se va.
   const autor = await persona(proxio, 'alfa')
@@ -119,12 +119,12 @@ test('el autor APAGADO: el acuse se sella, espera en la cola y se abre al encend
 // ---------------------------------------------------------------------------
 
 test('si el autor NUNCA anunció su llave, no se manda nada — y se distingue por code', async () => {
-  const proxio = crearProxio()
-  instalarWebSocket(proxio)
+  const proxio = createProxy()
+  installWebSocket(proxio)
 
   const lector = await persona(proxio, 'beta')
   await conectar(lector)
-  const desconocido = await boveda('nunca-se-conecto')
+  const desconocido = await fakeVault('nunca-se-conecto')
   const { receipts } = motor(lector)
 
   const antes = proxio.cable.length
@@ -157,8 +157,8 @@ test('un cliente sin sendSealed no manda el acuse en claro: se para y se dice', 
 // ---------------------------------------------------------------------------
 
 test('un acuse en CLARO no entra en la app, aunque el sobre esté bien formado', async () => {
-  const proxio = crearProxio()
-  instalarWebSocket(proxio)
+  const proxio = createProxy()
+  installWebSocket(proxio)
 
   const autor = await persona(proxio, 'alfa')
   const { receipts, avisos } = motor(autor)
@@ -211,12 +211,12 @@ test('el motor no se fía de meta.sealed ausente, ni cuando el cliente se lo ent
 // ---------------------------------------------------------------------------
 
 test('un acuse que no pudo salir no gasta la ventana anti-spam', async () => {
-  const proxio = crearProxio()
-  instalarWebSocket(proxio)
+  const proxio = createProxy()
+  installWebSocket(proxio)
 
   const lector = await persona(proxio, 'beta')
   await conectar(lector)
-  const autor = await boveda('alfa')
+  const autor = await fakeVault('alfa')
   const { receipts } = motor(lector)
 
   // Primer intento: el autor no ha anunciado llave. Falla.
