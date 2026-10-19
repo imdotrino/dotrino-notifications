@@ -293,7 +293,8 @@ const RECEIPT_I18N = {
   },
 }
 
-function _receiptLang (lang) {
+// Idioma efectivo: 'es'/'en' si se pide así; 'auto' (o nada) sigue al navegador.
+function _resolveLang (lang) {
   const a = (lang || 'auto').toLowerCase()
   if (a === 'es' || a === 'en') return a
   const nav = (isBrowser && navigator.language || 'es').slice(0, 2)
@@ -424,7 +425,7 @@ export function createShareReceipts (cfg = {}) {
   // Construye {title, body, ...} por defecto a partir del sobre (mismo contenido
   // en toda app). La app puede sobreescribirlo con cfg.render.
   function _defaultRender (env) {
-    const t = RECEIPT_I18N[_receiptLang(lang)]
+    const t = RECEIPT_I18N[_resolveLang(lang)]
     const nick = env.from && env.from.nick
     const title = t.openedTitle
     const body = env.name ? t.openedBodyNamed(env.name, nick) : t.openedBodyAnon(nick)
@@ -676,12 +677,7 @@ class DotrinoNotifications extends _HTMLElement {
   disconnectedCallback () { if (this._unsub) { this._unsub(); this._unsub = null } }
   attributeChangedCallback () { this._render() }
 
-  _lang () {
-    const a = (this.getAttribute('lang') || 'auto').toLowerCase()
-    if (a === 'es' || a === 'en') return a
-    const nav = (isBrowser && navigator.language || 'es').slice(0, 2)
-    return nav === 'en' ? 'en' : 'es'
-  }
+  _lang () { return _resolveLang(this.getAttribute('lang')) }
 
   _esc (s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
